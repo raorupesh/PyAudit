@@ -6,7 +6,7 @@ from pyaudit.fsutils import count_total_lines, iter_python_files, relative_path
 from pyaudit.models import DeadCodeItem, DeadCodeResult
 
 
-def analyze_deadcode(root: Path, min_confidence: int = 60) -> DeadCodeResult:
+def analyze_deadcode(root: Path, min_confidence: int = 60, ignore_dirs: set[str] | None = None) -> DeadCodeResult:
     """Run vulture over root and return unused code items plus a dead-line ratio.
 
     Feeds vulture an explicit file list from iter_python_files rather than
@@ -16,8 +16,8 @@ def analyze_deadcode(root: Path, min_confidence: int = 60) -> DeadCodeResult:
     iter_python_files already gets this right by only checking components
     below root.
     """
-    files = [str(f) for f in iter_python_files(root)]
-    total_lines = count_total_lines(root)
+    files = [str(f) for f in iter_python_files(root, ignore_dirs)]
+    total_lines = count_total_lines(root, ignore_dirs)
     if not files:
         return DeadCodeResult(total_lines=total_lines)
 

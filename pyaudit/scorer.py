@@ -1,6 +1,18 @@
 from pyaudit.models import AuditResults
 
 
+def grade_for_score(score: int) -> str:
+    if score >= 90:
+        return "A"
+    if score >= 80:
+        return "B"
+    if score >= 70:
+        return "C"
+    if score >= 60:
+        return "D"
+    return "F"
+
+
 def calculate_health_score(results: AuditResults, coverage_target: int = 80) -> int:
     score = 100
 

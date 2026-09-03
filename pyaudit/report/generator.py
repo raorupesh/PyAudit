@@ -1,8 +1,10 @@
+from datetime import datetime
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from pyaudit.models import AuditResults, Risk
+from pyaudit.scorer import grade_for_score
 
 TEMPLATE_DIR = Path(__file__).parent / "templates"
 
@@ -35,13 +37,16 @@ def _build_summary(results: AuditResults, score: int) -> list[str]:
     return sentences
 
 
-def generate_html(results: AuditResults, score: int, project_name: str, coverage_target: int = 80) -> str:
-    env = Environment(
+def _env() -> Environment:
+    return Environment(
         loader=FileSystemLoader(str(TEMPLATE_DIR)),
         autoescape=select_autoescape(["html", "j2"]),
     )
-    template = env.get_template("report.html.j2")
 
+
+def build_report_context(results: AuditResults, score: int, project_name: str, coverage_target: int = 80) -> dict:
+    """Build the template variables shared by the standalone HTML report and
+    the web UI's report view, so both render the exact same content."""
     complexity_flagged = sorted(
         (f for f in results.complexity.functions if f.risk in (Risk.HIGH, Risk.MEDIUM)),
         key=lambda f: f.complexity,
@@ -54,14 +59,21 @@ def generate_html(results: AuditResults, score: int, project_name: str, coverage
     security_issues = sorted(results.security.issues, key=lambda i: _SEVERITY_RANK.get(i.severity, 9))
     coverage_files = sorted(results.coverage.files, key=lambda f: f.percent_covered)
 
-    return template.render(
-        project_name=project_name,
-        results=results,
-        score=score,
-        coverage_target=coverage_target,
-        summary=_build_summary(results, score),
-        complexity_flagged=complexity_flagged,
-        static_issues=static_issues,
-        security_issues=security_issues,
-        coverage_files=coverage_files,
-    )
+    return {
+        "project_name": project_name,
+        "results": results,
+        "score": score,
+        "grade": grade_for_score(score),
+        "coverage_target": coverage_target,
+        "summary": _build_summary(results, score),
+        "complexity_flagged": complexity_flagged,
+        "static_issues": static_issues,
+        "security_issues": security_issues,
+        "coverage_files": coverage_files,
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    }
+
+
+def generate_html(results: AuditResults, score: int, project_name: str, coverage_target: int = 80) -> str:
+    template = _env().get_template("report.html.j2")
+    return template.render(**build_report_context(results, score, project_name, coverage_target))

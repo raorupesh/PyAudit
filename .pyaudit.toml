@@ -1,0 +1,8 @@
+[pyaudit]
+complexity_threshold = 10
+coverage_target = 80
+
+[pyaudit.ignore]
+# tests/fixtures/*.py are deliberately bad code used by the test suite
+# (high complexity, dead code, security issues) — not real source.
+paths = ["fixtures"]

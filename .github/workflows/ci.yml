@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install PyAudit
+        run: pip install -e .
+
+      - name: Run test suite
+        run: pytest
+
+  self-audit:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyAudit
+        run: pip install -e .
+
+      # Dogfooding: PyAudit audits its own source and fails the build if its
+      # health score regresses below the gate. .pyaudit.toml (checked into
+      # this repo) excludes tests/fixtures/, which is deliberately bad code
+      # used by the test suite, not real source.
+      - name: Self-audit with PyAudit
+        run: pyaudit scan . --skip-coverage --ci --min-score 75 --output pyaudit-report.html
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pyaudit-report
+          path: pyaudit-report.html

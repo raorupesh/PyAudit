@@ -1,0 +1,51 @@
+<style>
+  .topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 20px 0 4px; flex-wrap: wrap; }
+  .topbar .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; text-decoration: none; color: var(--text); }
+  .topbar .brand .brand-mark { margin-bottom: 0; }
+  .topbar .brand .brand-name { font-size: 14px; color: var(--text); text-transform: none; letter-spacing: 0; }
+  .topbar nav { display: flex; align-items: center; gap: 10px; }
+  .topbar nav a { color: var(--muted); text-decoration: none; font-size: 13.5px; }
+  .topbar nav a:hover { color: var(--text); }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--panel-2); color: var(--text); font-size: 13.5px;
+    font-weight: 600; cursor: pointer; text-decoration: none; font-family: inherit;
+  }
+  .btn:hover { border-color: var(--blue); }
+  .btn.primary { background: linear-gradient(135deg, var(--blue), var(--violet)); border: none; color: #fff; }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  .lede { color: var(--muted); font-size: 14.5px; margin: 4px 0 22px; max-width: 640px; line-height: 1.55; }
+
+  .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+  .field label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .field input[type=text], .field input[type=number] {
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 10px 12px; color: var(--text); font-size: 14px; font-family: inherit;
+  }
+  .field input:focus { outline: none; border-color: var(--blue); }
+  .field .hint { color: var(--muted-2); font-size: 12px; }
+  .field-row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .field-row .field { flex: 1; min-width: 180px; }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; margin: 4px 0 20px; font-size: 13.5px; color: var(--text); }
+  .checkbox-row input { width: 16px; height: 16px; }
+
+  .alert { padding: 12px 16px; border-radius: var(--radius-sm); margin-bottom: 18px; font-size: 13.5px; border: 1px solid; }
+  .alert.error { background: var(--red-bg); border-color: var(--red); color: var(--red); }
+  .alert.warn { background: var(--amber-bg); border-color: var(--amber); color: var(--amber); }
+
+  .safety-note {
+    display: flex; gap: 10px; align-items: flex-start; font-size: 12.5px; color: var(--muted);
+    background: var(--panel-2); border: 1px solid var(--border-soft); border-radius: var(--radius-sm);
+    padding: 12px 14px; margin-bottom: 24px; line-height: 1.5;
+  }
+  .safety-note .icon { width: 16px; height: 16px; flex: none; margin-top: 1px; color: var(--amber); }
+  .safety-note .icon svg { width: 100%; height: 100%; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  .score-chip {
+    display: inline-flex; align-items: center; justify-content: center; min-width: 34px; padding: 3px 8px;
+    border-radius: 999px; font-size: 12.5px; font-weight: 700;
+  }
+</style>

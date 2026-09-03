@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PyAudit Web Scanner</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%235b7ff5'/%3E%3Cpath d='M9 17l5 5 9-11' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+{% include "theme_init.html.j2" %}
+{% include "styles.html.j2" %}
+{% include "styles_web.html.j2" %}
+</head>
+<body>
+<div class="shell">
+
+  <div class="topbar">
+    <a class="brand" href="{{ url_for('index') }}">
+      <span class="brand-mark">PA</span>
+      <span class="brand-name">PyAudit</span>
+    </a>
+    {% include "theme_toggle_button.html.j2" %}
+  </div>
+
+  <div class="title-block" style="padding-top: 6px;">
+    <h1>Run a scan</h1>
+    <p class="lede">Point PyAudit at a Python project on this machine and get a prioritized health report — complexity, static analysis, dead code, security, dependencies, and test coverage — without touching the command line.</p>
+  </div>
+
+  <div id="scan-error" class="alert error" style="display: none;"></div>
+
+  <div class="safety-note">
+    <span class="icon"><svg viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01M10.3 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L14.7 3.86a2 2 0 0 0-3.4 0z"/></svg></span>
+    <span>Scans run locally with access to the filesystem and can execute the target project's own test suite. This UI is meant for local/dev use on <code>127.0.0.1</code> — don't expose it to an untrusted network without adding authentication in front of it.</span>
+  </div>
+
+  <div class="panel" id="scan-form-panel">
+    <div class="panel-head">
+      <h2><span class="dot" style="background: var(--blue);"></span>New scan</h2>
+    </div>
+    <form id="scan-form" enctype="multipart/form-data">
+      <div class="field">
+        <label for="source_type">Source</label>
+        <select id="source_type" name="source_type">
+          <option value="path">Local project folder</option>
+          <option value="github">GitHub repository URL</option>
+          <option value="upload">Upload project zip / tar archive</option>
+          <option value="paste">Paste Python code</option>
+        </select>
+      </div>
+
+      <div class="source-panel" data-source="path">
+        <div class="field">
+          <label for="path">Project path</label>
+          <input type="text" id="path" name="path" placeholder="C:\path\to\your\project" autofocus>
+          <span class="hint">Absolute or relative path to a directory on this machine.</span>
+        </div>
+      </div>
+
+      <div class="source-panel" data-source="github" style="display: none;">
+        <div class="field">
+          <label for="github_url">GitHub repository URL</label>
+          <input type="url" id="github_url" name="github_url" placeholder="https://github.com/owner/repo">
+          <span class="hint">PyAudit downloads the default branch and scans it like a local project.</span>
+        </div>
+      </div>
+
+      <div class="source-panel" data-source="upload" style="display: none;">
+        <div class="field">
+          <label for="source_file">Upload a project archive</label>
+          <input type="file" id="source_file" name="source_file" accept=".zip,.tar,.tar.gz,.tgz,.py">
+          <span class="hint">Supports .zip, .tar.gz, .tgz, and single .py files.</span>
+        </div>
+      </div>
+
+      <div class="source-panel" data-source="paste" style="display: none;">
+        <div class="field">
+          <label for="paste_code">Paste Python code</label>
+          <textarea id="paste_code" name="paste_code" rows="10" placeholder="def hello():\n    return 'hello'\n\nprint(hello())"></textarea>
+          <span class="hint">PyAudit will scan the pasted snippet as a temporary project.</span>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="complexity_threshold">Complexity threshold</label>
+          <input type="number" id="complexity_threshold" name="complexity_threshold" value="10" min="1">
+        </div>
+        <div class="field">
+          <label for="coverage_target">Coverage target (%)</label>
+          <input type="number" id="coverage_target" name="coverage_target" value="80" min="0" max="100">
+        </div>
+      </div>
+      <label class="checkbox-row">
+        <input type="checkbox" name="skip_coverage">
+        Skip test-suite coverage (faster; skips the audit that runs the target's own tests)
+      </label>
+      <button type="submit" class="btn primary" id="scan-submit">Run scan</button>
+    </form>
+  </div>
+
+  <div class="panel" id="scan-progress" style="display: none;">
+    <div class="panel-head">
+      <h2><span class="dot" style="background: var(--blue);"></span>Scanning</h2>
+      <span class="badge-count" id="scan-progress-label">Starting…</span>
+    </div>
+    <ul class="stage-list" id="stage-list">
+      <li data-stage="complexity"><span class="stage-dot"></span>Complexity analysis (radon)</li>
+      <li data-stage="static"><span class="stage-dot"></span>Static analysis (pylint)</li>
+      <li data-stage="deadcode"><span class="stage-dot"></span>Dead code detection (vulture)</li>
+      <li data-stage="security"><span class="stage-dot"></span>Security scan (bandit)</li>
+      <li data-stage="dependencies"><span class="stage-dot"></span>Dependency audit (pip-audit)</li>
+      <li data-stage="coverage"><span class="stage-dot"></span>Test coverage (pytest)</li>
+    </ul>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <h2><span class="dot" style="background: var(--teal);"></span>Recent scans</h2>
+      <span class="badge-count">this session</span>
+    </div>
+    {% if history %}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Score</th><th>Path</th><th>When</th><th></th></tr></thead>
+        <tbody>
+        {% for scan in history %}
+        {% set tone = 'good' if scan.score > 80 else ('warn' if scan.score >= 60 else 'bad') %}
+        <tr>
+          <td><span class="score-chip tone-chip-{{ tone }}">{{ scan.score }}</span></td>
+          <td><code title="{{ scan.path }}">{{ scan.path }}</code></td>
+          <td>{{ scan.created_at }}</td>
+          <td><a class="btn" href="{{ url_for('view_report', scan_id=scan.id) }}">View report</a></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <div class="icon"><svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/></svg></div>
+      No scans yet — run one above to see it here.
+    </div>
+    {% endif %}
+  </div>
+
+  <footer class="report-footer">PyAudit web UI</footer>
+</div>
+
+{% include "theme_toggle_script.html.j2" %}
+<script>
+(function () {
+  var form = document.getElementById('scan-form');
+  var submitBtn = document.getElementById('scan-submit');
+  var formPanel = document.getElementById('scan-form-panel');
+  var progressPanel = document.getElementById('scan-progress');
+  var progressLabel = document.getElementById('scan-progress-label');
+  var stageItems = Array.prototype.slice.call(document.querySelectorAll('#stage-list li'));
+  var errorBox = document.getElementById('scan-error');
+  var sourceType = document.getElementById('source_type');
+  var sourcePanels = Array.prototype.slice.call(document.querySelectorAll('.source-panel'));
+
+  function updateSourcePanels() {
+    var value = sourceType.value;
+    sourcePanels.forEach(function (panel) {
+      panel.style.display = panel.getAttribute('data-source') === value ? '' : 'none';
+    });
+  }
+
+  sourceType.addEventListener('change', updateSourcePanels);
+  updateSourcePanels();
+
+  var STAGE_ORDER = ['complexity', 'static', 'deadcode', 'security', 'dependencies', 'coverage'];
+  var STAGE_LABEL = {
+    queued: 'Starting…',
+    complexity: 'Running complexity analysis…',
+    static: 'Running static analysis…',
+    deadcode: 'Scanning for dead code…',
+    security: 'Running security scan…',
+    dependencies: 'Auditing dependencies…',
+    coverage: 'Measuring test coverage…',
+    done: 'Building report…'
+  };
+
+  function setStage(stage) {
+    progressLabel.textContent = STAGE_LABEL[stage] || stage;
+    var idx = STAGE_ORDER.indexOf(stage);
+    stageItems.forEach(function (li) {
+      var liIdx = STAGE_ORDER.indexOf(li.getAttribute('data-stage'));
+      li.classList.remove('active', 'complete');
+      if (stage === 'done' || liIdx < idx) {
+        li.classList.add('complete');
+      } else if (liIdx === idx) {
+        li.classList.add('active');
+      }
+    });
+  }
+
+  function showError(message) {
+    progressPanel.style.display = 'none';
+    formPanel.style.display = '';
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Run scan';
+    errorBox.textContent = message;
+    errorBox.style.display = '';
+  }
+
+  function poll(jobId) {
+    fetch('/scan/' + jobId + '/status')
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.status === 'running') {
+          setStage(data.stage || 'queued');
+          setTimeout(function () { poll(jobId); }, 600);
+        } else if (data.status === 'done') {
+          setStage('done');
+          window.location.href = '/report/' + data.scan_id;
+        } else {
+          showError(data.error || 'The scan failed.');
+        }
+      })
+      .catch(function () { showError('Lost contact with the scan job.'); });
+  }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    errorBox.style.display = 'none';
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Scanning…';
+    formPanel.style.display = 'none';
+    progressPanel.style.display = '';
+    setStage('queued');
+
+    fetch('/scan', { method: 'POST', body: new FormData(form) })
+      .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+      .then(function (res) {
+        if (!res.ok) { showError(res.data.error || 'Could not start the scan.'); return; }
+        poll(res.data.job_id);
+      })
+      .catch(function () { showError('Could not reach the server.'); });
+  });
+})();
+</script>
+</body>
+</html>

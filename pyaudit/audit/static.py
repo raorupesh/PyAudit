@@ -15,19 +15,20 @@ _CATEGORY_MAP = {
 }
 
 
-def analyze_static(root: Path, timeout: int = 120) -> StaticResult:
+def analyze_static(root: Path, timeout: int = 120, ignore_dirs: set[str] | None = None) -> StaticResult:
     """Run pylint over root and return categorized issues.
 
     Runs as a subprocess (rather than pylint's in-process API) so a pylint
     crash or a non-zero exit code (pylint exits non-zero whenever it finds
     issues) can never take down the rest of the audit.
     """
+    ignore_dirs = ignore_dirs if ignore_dirs is not None else DEFAULT_IGNORE_DIRS
     try:
         proc = subprocess.run(
             [
                 sys.executable, "-m", "pylint",
                 "--output-format=json", "--recursive=y",
-                f"--ignore={','.join(sorted(DEFAULT_IGNORE_DIRS))}",
+                f"--ignore={','.join(sorted(ignore_dirs))}",
                 str(root),
             ],
             capture_output=True,

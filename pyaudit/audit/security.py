@@ -7,15 +7,16 @@ from pyaudit.fsutils import DEFAULT_IGNORE_DIRS
 from pyaudit.models import SecurityIssue, SecurityResult
 
 
-def analyze_security(root: Path, timeout: int = 120) -> SecurityResult:
+def analyze_security(root: Path, timeout: int = 120, ignore_dirs: set[str] | None = None) -> SecurityResult:
     """Run bandit over root and return findings bucketed by severity."""
+    ignore_dirs = ignore_dirs if ignore_dirs is not None else DEFAULT_IGNORE_DIRS
     try:
         proc = subprocess.run(
             [
                 sys.executable, "-m", "bandit",
                 "-r", str(root),
                 "-f", "json", "-q",
-                "-x", ",".join(sorted(DEFAULT_IGNORE_DIRS)),
+                "-x", ",".join(sorted(ignore_dirs)),
             ],
             capture_output=True,
             text=True,

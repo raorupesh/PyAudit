@@ -1,0 +1,377 @@
+{% set tone = 'good' if score > 80 else ('warn' if score >= 60 else 'bad') %}
+{% set circumference = 389.6 %}
+{% set offset = circumference - (circumference * score / 100) %}
+
+<div class="title-block">
+  <div class="brand" style="justify-content: space-between;">
+    <span style="display: flex; align-items: center; gap: 9px;">
+      <span class="brand-mark">PA</span>
+      <span class="brand-name">PyAudit</span>
+    </span>
+    {% include "theme_toggle_button.html.j2" %}
+  </div>
+  <h1>PyAudit Report</h1>
+  <p class="meta">{{ project_name }} · generated {{ generated_at }}</p>
+</div>
+
+<div class="hero">
+  <div class="gauge">
+    <svg width="150" height="150" viewBox="0 0 150 150">
+      <circle class="ring-bg" cx="75" cy="75" r="62"></circle>
+      <circle class="ring-fg tone-{{ tone }}" cx="75" cy="75" r="62" stroke="currentColor"
+              stroke-dasharray="{{ circumference }}" stroke-dashoffset="{{ offset }}"></circle>
+    </svg>
+    <div class="ring-label">
+      <span class="num">{{ score }}</span>
+      <span class="denom">/ 100</span>
+    </div>
+    <div class="grade-badge tone-chip-{{ tone }}">{{ grade }}</div>
+  </div>
+  <div class="hero-summary">
+    <ul>
+      {% for line in summary %}
+      <li>{{ line }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card" style="--accent: var(--violet);">
+    <div class="icon"><svg viewBox="0 0 24 24"><path d="M4 18a8 8 0 1 1 16 0"/><path d="M12 18l4-6"/><circle cx="12" cy="18" r="1"/></svg></div>
+    <div class="label">Complexity</div>
+    <div class="value">{{ results.complexity.high_count }} high</div>
+    <div class="sub">{{ results.complexity.total_functions }} functions scanned</div>
+  </div>
+  <div class="stat-card" style="--accent: var(--blue);">
+    <div class="icon"><svg viewBox="0 0 24 24"><path d="M12 3l10 18H2L12 3z"/><path d="M12 9v5M12 17h.01"/></svg></div>
+    <div class="label">Static analysis</div>
+    <div class="value">{{ results.static.error_count }} errors</div>
+    <div class="sub">{{ results.static.warning_count }} warnings</div>
+  </div>
+  <div class="stat-card" style="--accent: var(--slate);">
+    <div class="icon"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/><path d="M10 11v6M14 11v6"/></svg></div>
+    <div class="label">Dead code</div>
+    <div class="value">{{ (results.deadcode.dead_ratio * 100) | round(1) }}%</div>
+    <div class="sub">{{ results.deadcode.items | length }} unused items</div>
+  </div>
+  <div class="stat-card" style="--accent: var(--red);">
+    <div class="icon"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/></svg></div>
+    <div class="label">Security</div>
+    <div class="value">{{ results.security.high_count }} high</div>
+    <div class="sub">{{ results.security.medium_count }} medium, {{ results.security.low_count }} low</div>
+  </div>
+  <div class="stat-card" style="--accent: var(--orange);">
+    <div class="icon"><svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg></div>
+    <div class="label">Dependencies</div>
+    <div class="value">{{ results.dependencies.vulnerable_count }} vuln.</div>
+    <div class="sub">{% if results.dependencies.scanned %}{{ results.dependencies.source_file }}{% else %}not scanned{% endif %}</div>
+  </div>
+  <div class="stat-card" style="--accent: var(--teal);">
+    <div class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg></div>
+    <div class="label">Coverage</div>
+    <div class="value">{% if results.coverage.available %}{{ results.coverage.overall_pct }}%{% else %}n/a{% endif %}</div>
+    <div class="sub">target {{ coverage_target }}%</div>
+  </div>
+</div>
+
+<nav class="section-nav">
+  <a href="#complexity">Complexity <span class="count">{{ results.complexity.high_count + results.complexity.medium_count }}</span></a>
+  <a href="#static">Static <span class="count">{{ results.static.error_count + results.static.warning_count }}</span></a>
+  <a href="#deadcode">Dead code <span class="count">{{ results.deadcode.items | length }}</span></a>
+  <a href="#security">Security <span class="count">{{ results.security.high_count + results.security.medium_count + results.security.low_count }}</span></a>
+  <a href="#dependencies">Dependencies <span class="count">{{ results.dependencies.vulnerable_count }}</span></a>
+  <a href="#coverage">Coverage <span class="count">{% if results.coverage.available %}{{ results.coverage.overall_pct }}%{% else %}n/a{% endif %}</span></a>
+</nav>
+
+<section id="complexity" class="panel">
+  <div class="panel-head">
+    <h2><span class="dot" style="background: var(--violet);"></span>Complexity</h2>
+    <span class="badge-count">{{ results.complexity.high_count }} high · {{ results.complexity.medium_count }} medium</span>
+  </div>
+  {% if complexity_flagged %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Risk</th><th>Complexity</th><th>Function</th><th>Location</th></tr></thead>
+      <tbody>
+      {% for f in complexity_flagged %}
+      <tr>
+        <td><span class="pill {{ f.risk.value }}">{{ f.risk.value }}</span></td>
+        <td>{{ f.complexity }}</td>
+        <td>{{ f.name }}</td>
+        <td><code>{{ f.file }}:{{ f.lineno }}</code></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="icon"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></div>
+    No high or medium complexity functions found.
+  </div>
+  {% endif %}
+</section>
+
+<section id="static" class="panel">
+  <div class="panel-head">
+    <h2><span class="dot" style="background: var(--blue);"></span>Static analysis</h2>
+    <span class="badge-count">{{ results.static.error_count }} errors · {{ results.static.warning_count }} warnings</span>
+  </div>
+  {% if static_issues %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Type</th><th>Message</th><th>Location</th></tr></thead>
+      <tbody>
+      {% for i in static_issues[:100] %}
+      <tr>
+        <td><span class="pill {{ i.category }}">{{ i.category }}</span></td>
+        <td>{{ i.message }} <code>{{ i.symbol }}</code></td>
+        <td><code>{{ i.file }}:{{ i.line }}</code></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if static_issues | length > 100 %}<p class="more-note">…and {{ static_issues | length - 100 }} more.</p>{% endif %}
+  {% else %}
+  <div class="empty-state">
+    <div class="icon"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></div>
+    No errors or warnings found.
+  </div>
+  {% endif %}
+</section>
+
+<section id="deadcode" class="panel">
+  <div class="panel-head">
+    <h2><span class="dot" style="background: var(--slate);"></span>Dead code</h2>
+    <span class="badge-count">{{ results.deadcode.items | length }} unused items</span>
+  </div>
+  {% if results.deadcode.items %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Type</th><th>Name</th><th>Confidence</th><th>Location</th></tr></thead>
+      <tbody>
+      {% for d in results.deadcode.items %}
+      <tr>
+        <td>{{ d.type }}</td>
+        <td>{{ d.name }}</td>
+        <td>{{ d.confidence }}%</td>
+        <td><code>{{ d.file }}:{{ d.lineno }}</code></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="icon"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></div>
+    No unused code found.
+  </div>
+  {% endif %}
+</section>
+
+<section id="security" class="panel">
+  <div class="panel-head">
+    <h2><span class="dot" style="background: var(--red);"></span>Security</h2>
+    <span class="badge-count">{{ results.security.high_count }} high · {{ results.security.medium_count }} medium · {{ results.security.low_count }} low</span>
+  </div>
+  {% if security_issues %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Severity</th><th>Issue</th><th>Test</th><th>Location</th></tr></thead>
+      <tbody>
+      {% for s in security_issues %}
+      <tr>
+        <td><span class="pill {{ s.severity }}">{{ s.severity }}</span></td>
+        <td>{{ s.issue }}</td>
+        <td><code>{{ s.test_id }}</code></td>
+        <td><code>{{ s.file }}:{{ s.line }}</code></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="icon"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></div>
+    No security findings.
+  </div>
+  {% endif %}
+</section>
+
+<section id="dependencies" class="panel">
+  <div class="panel-head">
+    <h2><span class="dot" style="background: var(--orange);"></span>Dependencies</h2>
+    <span class="badge-count">{% if results.dependencies.source_file %}{{ results.dependencies.source_file }}{% else %}not scanned{% endif %}</span>
+  </div>
+  {% if not results.dependencies.scanned %}
+  <div class="empty-state">
+    <div class="icon"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></div>
+    No requirements.txt found — dependency scan skipped.
+  </div>
+  {% elif results.dependencies.vulnerable %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Package</th><th>Installed</th><th>CVE / advisory</th><th>Fix version(s)</th></tr></thead>
+      <tbody>
+      {% for v in results.dependencies.vulnerable %}
+      <tr>
+        <td><span class="pill high">{{ v.name }}</span></td>
+        <td>{{ v.installed_version }}</td>
+        <td><code>{{ v.vulnerability_id }}</code></td>
+        <td>{{ v.fix_versions | join(', ') if v.fix_versions else '—' }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="icon"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></div>
+    No known vulnerabilities in scanned dependencies.
+  </div>
+  {% endif %}
+</section>
+
+<section id="coverage" class="panel">
+  <div class="panel-head">
+    <h2><span class="dot" style="background: var(--teal);"></span>Coverage</h2>
+    <span class="badge-count">{% if results.coverage.available %}{{ results.coverage.overall_pct }}% overall{% else %}unavailable{% endif %}</span>
+  </div>
+  {% if results.coverage.available %}
+    <div class="cov-list">
+    {% for f in coverage_files %}
+    {% set tone = 'good' if f.percent_covered >= coverage_target else ('warn' if f.percent_covered >= 40 else 'bad') %}
+    <div class="cov-row">
+      <code title="{{ f.file }}">{{ f.file }}</code>
+      <div class="bar-track"><div class="bar-fill tone-fill-{{ tone }}" style="width: {{ f.percent_covered }}%;"></div></div>
+      <span>{{ f.percent_covered }}%</span>
+    </div>
+    {% endfor %}
+    </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="icon"><svg viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01M10.3 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L14.7 3.86a2 2 0 0 0-3.4 0z"/></svg></div>
+    Coverage unavailable ({{ results.coverage.reason or 'unknown reason' }}).
+  </div>
+  {% endif %}
+</section>
+
+<footer class="report-footer">Generated by PyAudit · {{ generated_at }}</footer>
+
+{% include "theme_toggle_script.html.j2" %}
+<script>
+(function () {
+  var COLLAPSE_LIMIT = 4;
+
+  function addShowMoreButton(anchor, total, onToggle) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'show-more-btn';
+    var expanded = false;
+    function render() {
+      btn.textContent = expanded ? 'Show fewer' : 'Show all ' + total + ' rows (' + (total - COLLAPSE_LIMIT) + ' more)';
+    }
+    render();
+    btn.addEventListener('click', function () {
+      expanded = !expanded;
+      onToggle(expanded);
+      render();
+      if (!expanded) { anchor.scrollIntoView({ block: 'nearest' }); }
+    });
+    anchor.parentNode.insertBefore(btn, anchor.nextSibling);
+    return { isExpanded: function () { return expanded; }, buttonEl: btn };
+  }
+
+  function initTable(wrap) {
+    var table = wrap.querySelector('table');
+    if (!table) return;
+    var thead = table.querySelector('thead');
+    var tbody = table.querySelector('tbody');
+    if (!thead || !tbody) return;
+    var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
+    if (rows.length < 2) return;
+
+    var collapsible = rows.length > COLLAPSE_LIMIT;
+    var showMore = null;
+
+    function applyCollapse() {
+      if (!collapsible) return;
+      var expanded = showMore && showMore.isExpanded();
+      Array.prototype.slice.call(tbody.querySelectorAll('tr')).forEach(function (row, idx) {
+        row.classList.toggle('row-extra', !expanded && idx >= COLLAPSE_LIMIT);
+      });
+    }
+
+    var toolbar = document.createElement('div');
+    toolbar.className = 'table-toolbar';
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = 'Filter rows…';
+    input.className = 'table-filter';
+    var count = document.createElement('span');
+    count.className = 'table-count';
+
+    function updateCount(shown) { count.textContent = shown + ' / ' + rows.length + ' rows'; }
+    updateCount(rows.length);
+
+    input.addEventListener('input', function () {
+      var q = input.value.trim().toLowerCase();
+      var filtering = !!q;
+      var shown = 0;
+      rows.forEach(function (row) {
+        var match = !q || row.textContent.toLowerCase().indexOf(q) !== -1;
+        row.style.display = match ? (filtering ? 'table-row' : '') : 'none';
+        if (match) shown++;
+      });
+      updateCount(shown);
+      if (showMore) { showMore.buttonEl.style.display = filtering ? 'none' : ''; }
+    });
+
+    toolbar.appendChild(input);
+    toolbar.appendChild(count);
+    wrap.parentNode.insertBefore(toolbar, wrap);
+
+    if (collapsible) {
+      showMore = addShowMoreButton(wrap, rows.length, applyCollapse);
+      applyCollapse();
+    }
+
+    var ths = Array.prototype.slice.call(thead.querySelectorAll('th'));
+    ths.forEach(function (th, colIndex) {
+      th.classList.add('sortable');
+      th.addEventListener('click', function () {
+        var asc = th.getAttribute('data-order') !== 'asc';
+        ths.forEach(function (t) { t.removeAttribute('data-order'); t.classList.remove('sort-active'); });
+        th.setAttribute('data-order', asc ? 'asc' : 'desc');
+        th.classList.add('sort-active');
+
+        var sorted = rows.slice().sort(function (a, b) {
+          var av = a.children[colIndex] ? a.children[colIndex].textContent.trim() : '';
+          var bv = b.children[colIndex] ? b.children[colIndex].textContent.trim() : '';
+          var an = parseFloat(av.replace('%', ''));
+          var bn = parseFloat(bv.replace('%', ''));
+          var bothNumeric = !isNaN(an) && !isNaN(bn);
+          var cmp = bothNumeric ? (an - bn) : av.localeCompare(bv);
+          return asc ? cmp : -cmp;
+        });
+        sorted.forEach(function (row) { tbody.appendChild(row); });
+        applyCollapse();
+      });
+    });
+  }
+
+  function initCoverageList(list) {
+    var rows = Array.prototype.slice.call(list.querySelectorAll('.cov-row'));
+    if (rows.length <= COLLAPSE_LIMIT) return;
+    rows.slice(COLLAPSE_LIMIT).forEach(function (row) { row.classList.add('row-extra'); });
+    addShowMoreButton(list, rows.length, function (expanded) {
+      rows.forEach(function (row, idx) { row.classList.toggle('row-extra', !expanded && idx >= COLLAPSE_LIMIT); });
+    });
+  }
+
+  Array.prototype.slice.call(document.querySelectorAll('.table-wrap')).forEach(initTable);
+  Array.prototype.slice.call(document.querySelectorAll('.cov-list')).forEach(initCoverageList);
+})();
+</script>

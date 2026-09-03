@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PyAudit Report</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%235b7ff5'/%3E%3Cpath d='M9 17l5 5 9-11' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+{% include "theme_init.html.j2" %}
+{% include "styles.html.j2" %}
+{% include "styles_web.html.j2" %}
+</head>
+<body>
+<div class="shell">
+
+  <div class="topbar">
+    <a class="brand" href="{{ url_for('index') }}">
+      <span class="brand-mark">PA</span>
+      <span class="brand-name">PyAudit</span>
+    </a>
+    <nav>
+      <a href="{{ url_for('index') }}">← New scan</a>
+      <div class="btn-row">
+        <a class="btn" href="{{ url_for('download', scan_id=scan_id, fmt='html') }}">Download HTML</a>
+        <a class="btn" href="{{ url_for('download', scan_id=scan_id, fmt='json') }}">Download JSON</a>
+      </div>
+    </nav>
+  </div>
+
+  {% if warnings %}
+  <div class="alert warn">
+    {% for w in warnings %}{{ w.module }} audit failed and was skipped: {{ w.error }}<br>{% endfor %}
+  </div>
+  {% endif %}
+
+{% include "report_body.html.j2" %}
+
+</div>
+</body>
+</html>

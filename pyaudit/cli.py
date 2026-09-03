@@ -1,4 +1,5 @@
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -6,6 +7,8 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from pyaudit import fsutils
+from pyaudit.config import load_config
 from pyaudit.models import Risk
 from pyaudit.report.generator import generate_html
 from pyaudit.report.serialize import results_to_dict
@@ -118,46 +121,86 @@ def _print_coverage(coverage, target: int) -> None:
         console.print(f"  {len(zero)} file(s) with 0% coverage: " + ", ".join(f.file for f in zero[:10]))
 
 
+def _resolve_scan_target(raw: str) -> tuple[Path, str, Path | None]:
+    """Returns (working_dir, display_name, temp_dir_to_clean_up_or_None)."""
+    if fsutils.is_github_url(raw):
+        try:
+            target, temp_root = fsutils.resolve_github_url(raw)
+        except Exception as e:  # noqa: BLE001 - reported to the user, not swallowed
+            console.print(f"[red]Error:[/red] could not fetch '{raw}': {e}")
+            raise typer.Exit(code=1)
+        return target, raw, temp_root
+
+    local_path = Path(raw).expanduser()
+    if not local_path.is_dir():
+        console.print(f"[red]Error:[/red] '{raw}' is not a directory that exists on this machine, and not a GitHub URL.")
+        raise typer.Exit(code=1)
+    return local_path, str(local_path), None
+
+
 @app.command()
 def scan(
-    path: Path = typer.Argument(..., exists=True, file_okay=False, dir_okay=True, help="Path to the Python project to audit."),
-    complexity_threshold: int = typer.Option(10, "--complexity-threshold", help="Cyclomatic complexity above which a function is flagged HIGH risk."),
-    coverage_target: int = typer.Option(80, "--coverage-target", help="Target test coverage percentage used in scoring."),
+    path: str = typer.Argument(..., help="Path to a local Python project, or a GitHub repo URL (https://github.com/owner/repo), to audit."),
+    complexity_threshold: int = typer.Option(None, "--complexity-threshold", help="Cyclomatic complexity above which a function is flagged HIGH risk. [default: 10, or .pyaudit.toml]"),
+    coverage_target: int = typer.Option(None, "--coverage-target", help="Target test coverage percentage used in scoring. [default: 80, or .pyaudit.toml]"),
     output: Path = typer.Option(None, "--output", help="Write a report to this path. Format is chosen by extension: .html or .json."),
     skip_coverage: bool = typer.Option(False, "--skip-coverage", help="Don't run the target's test suite under coverage (faster; skips the riskiest audit)."),
     ci: bool = typer.Option(False, "--ci", help="Exit with code 1 if the health score is below --min-score."),
-    min_score: int = typer.Option(70, "--min-score", help="Minimum health score required when --ci is set."),
+    min_score: int = typer.Option(None, "--min-score", help="Minimum health score required when --ci is set. [default: 70, or .pyaudit.toml]"),
 ) -> None:
-    """Run a full code quality audit on PATH."""
-    console.print(f"[bold]Scanning[/bold] {path}\n")
+    """Run a full code quality audit on PATH (a local directory or a GitHub repo URL).
 
-    results, warnings = run_audit(path, complexity_threshold=complexity_threshold, skip_coverage=skip_coverage)
-    score = calculate_health_score(results, coverage_target=coverage_target)
+    Thresholds fall back to a `.pyaudit.toml` at the target's root when a flag
+    isn't given, and finally to the built-in defaults noted above."""
+    target, display_name, temp_root = _resolve_scan_target(path)
 
-    for w in warnings:
-        console.print(f"[yellow]⚠[/yellow] {w.module} audit failed and was skipped: {w.error}")
+    try:
+        config = load_config(target)
+        effective_complexity_threshold = complexity_threshold if complexity_threshold is not None else (config.complexity_threshold or 10)
+        effective_coverage_target = coverage_target if coverage_target is not None else (config.coverage_target or 80)
+        effective_min_score = min_score if min_score is not None else (config.min_score or 70)
+        effective_skip_coverage = skip_coverage or config.skip_coverage
+        ignore_dirs = fsutils.merge_ignore_dirs(config.ignore_paths)
 
-    _print_complexity(results.complexity)
-    _print_static(results.static)
-    _print_deadcode(results.deadcode)
-    _print_security(results.security)
-    _print_dependencies(results.dependencies)
-    _print_coverage(results.coverage, coverage_target)
+        console.print(f"[bold]Scanning[/bold] {display_name}\n")
+        if config.loaded_from is not None:
+            console.print(f"[dim]Using {config.loaded_from.name}[/dim]\n")
 
-    color = _score_color(score)
-    console.print(f"\n[bold]\U0001f4ca Overall health score:[/bold] [{color}]{score}/100[/{color}]")
+        results, warnings = run_audit(
+            target,
+            complexity_threshold=effective_complexity_threshold,
+            skip_coverage=effective_skip_coverage,
+            ignore_dirs=ignore_dirs,
+        )
+        score = calculate_health_score(results, coverage_target=effective_coverage_target)
 
-    if output is not None:
-        if output.suffix == ".json":
-            output.write_text(json.dumps(results_to_dict(results, score), indent=2), encoding="utf-8")
-        else:
-            html = generate_html(results, score, project_name=str(path), coverage_target=coverage_target)
-            output.write_text(html, encoding="utf-8")
-        console.print(f"\U0001f4c4 Report written to: {output}")
+        for w in warnings:
+            console.print(f"[yellow]⚠[/yellow] {w.module} audit failed and was skipped: {w.error}")
 
-    if ci and score < min_score:
-        console.print(f"\n[red]CI check failed:[/red] health score {score} is below --min-score {min_score}")
-        raise typer.Exit(code=1)
+        _print_complexity(results.complexity)
+        _print_static(results.static)
+        _print_deadcode(results.deadcode)
+        _print_security(results.security)
+        _print_dependencies(results.dependencies)
+        _print_coverage(results.coverage, effective_coverage_target)
+
+        color = _score_color(score)
+        console.print(f"\n[bold]\U0001f4ca Overall health score:[/bold] [{color}]{score}/100[/{color}]")
+
+        if output is not None:
+            if output.suffix == ".json":
+                output.write_text(json.dumps(results_to_dict(results, score), indent=2), encoding="utf-8")
+            else:
+                html = generate_html(results, score, project_name=display_name, coverage_target=effective_coverage_target)
+                output.write_text(html, encoding="utf-8")
+            console.print(f"\U0001f4c4 Report written to: {output}")
+
+        if ci and score < effective_min_score:
+            console.print(f"\n[red]CI check failed:[/red] health score {score} is below --min-score {effective_min_score}")
+            raise typer.Exit(code=1)
+    finally:
+        if temp_root is not None:
+            shutil.rmtree(temp_root, ignore_errors=True)
 
 
 @app.command()
@@ -205,6 +248,29 @@ def compare(
         console.print("\n[red]Regressions detected.[/red]")
         raise typer.Exit(code=1)
     console.print("\n[green]No regressions.[/green]")
+
+
+@app.command()
+def web(
+    host: str = typer.Option("127.0.0.1", "--host", help="Interface to bind the web UI to."),
+    port: int = typer.Option(8765, "--port", help="Port for the web UI."),
+    debug: bool = typer.Option(False, "--debug", help="Run the web server in debug/auto-reload mode."),
+) -> None:
+    """Launch a local web UI: run scans and browse reports from a browser instead of the CLI."""
+    try:
+        from pyaudit.web.app import create_app
+    except ImportError:
+        console.print("[red]The web UI requires Flask.[/red] Run `pip install -e .` to install it.")
+        raise typer.Exit(code=1)
+
+    if host not in ("127.0.0.1", "localhost"):
+        console.print(
+            "[yellow]⚠[/yellow] Binding to a non-localhost address exposes local filesystem "
+            "scanning to your network — make sure that's intentional."
+        )
+
+    console.print(f"[bold]PyAudit web UI[/bold] running at [cyan]http://{host}:{port}[/cyan]  (Ctrl+C to stop)")
+    create_app().run(host=host, port=port, debug=debug, threaded=True)
 
 
 if __name__ == "__main__":

@@ -3,10 +3,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+from pyaudit.fsutils import DEFAULT_IGNORE_DIRS
 from pyaudit.models import CoverageResult, FileCoverage
 
 
-def analyze_coverage(root: Path, timeout: int = 120) -> CoverageResult:
+def analyze_coverage(root: Path, timeout: int = 120, ignore_dirs: set[str] | None = None) -> CoverageResult:
     """Discover and run the project's own pytest suite under coverage.py.
 
     This is the least reliable audit: it executes third-party test code in
@@ -14,11 +15,16 @@ def analyze_coverage(root: Path, timeout: int = 120) -> CoverageResult:
     importable here. Any failure degrades to `available=False` with a reason
     rather than aborting the whole scan.
     """
+    ignore_dirs = ignore_dirs if ignore_dirs is not None else DEFAULT_IGNORE_DIRS
     data_file = root / ".pyaudit_coverage_tmp"
+    omit = ",".join(f"*/{name}/*" for name in sorted(ignore_dirs))
 
     try:
         run_proc = subprocess.run(
-            [sys.executable, "-m", "coverage", "run", f"--data-file={data_file}", "--source=.", "-m", "pytest", "-q"],
+            [
+                sys.executable, "-m", "coverage", "run", f"--data-file={data_file}",
+                "--source=.", f"--omit={omit}", "-m", "pytest", "-q",
+            ],
             cwd=root,
             capture_output=True,
             text=True,
